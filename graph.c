@@ -1,3 +1,5 @@
+#include "graph.h"
+
 #include <stdio.h>      // printf, fputs, FILE, fscanf, stderr, stdin
 #include <stdlib.h>     // malloc, realloc, free, exit, NULL
 #include <assert.h>     // assert
@@ -12,15 +14,7 @@ typedef struct
 } char_utf8_t;
 
 
-typedef struct
-{
-    int align;
-    int decimals;
-
-} desc_t;
-
-
-char_utf8_t get_braille(int col1, int col2)
+static char_utf8_t get_braille(int col1, int col2)
 {
     assert(col1 >= 0);
     assert(col1 <= 4);
@@ -68,9 +62,9 @@ char_utf8_t get_braille(int col1, int col2)
 }
 
 
-int get_dots(float row, float value, float max_value, int height)
+static int get_dots(double row, double value, double max_value, int height)
 {
-    float chunk = max_value / height;
+    double chunk = max_value / height;
 
     if (value <= row * chunk)
         return 0;
@@ -84,14 +78,14 @@ int get_dots(float row, float value, float max_value, int height)
 }
 
 
-void spaces(int count)
+static void spaces(int count)
 {
     for (int i = 0; i < count; ++i)
         printf(" ");
 }
 
 
-void render_graph(const float* values, int count, float max_value, int height,
+void render_graph(const double* values, int count, double max_value, int height,
                   const desc_t* desc)
 {
     if (desc)
@@ -135,12 +129,12 @@ void render_graph(const float* values, int count, float max_value, int height,
 }
 
 
-float* read_input(FILE* file, int* count_out)
+double* read_input(FILE* file, int* count_out)
 {
     int buf = 256;
     int count = 0;
 
-    float* ptr = (float*) malloc(buf * sizeof(float));
+    double* ptr = (double*) malloc(buf * sizeof(double));
 
     if (!ptr)
     {
@@ -148,13 +142,13 @@ float* read_input(FILE* file, int* count_out)
         exit(EXIT_FAILURE);
     }
 
-    float num = 0;
-    while (fscanf(file, "%f", &num) == 1)
+    double num = 0;
+    while (fscanf(file, "%lf", &num) == 1)
     {
         if (++count > buf)
         {
             buf *= 2;
-            ptr = (float*) realloc((void*) ptr, buf * sizeof(float));
+            ptr = (double*) realloc((void*) ptr, buf * sizeof(double));
 
             if (!ptr)
             {
@@ -173,40 +167,3 @@ float* read_input(FILE* file, int* count_out)
 }
 
 
-int main(int argc, char** argv)
-{
-    int height = 7;
-    float max_value;
-
-    if (argc >= 2)
-    {
-        if (sscanf(argv[1], "%d", &height) == 0)
-            return fputs("ERROR: invalid height\n", stderr), EXIT_FAILURE;
-    }
-    else
-    {
-        return fprintf(stderr, "Usage: %s ‹HEIGHT› [MAX_VALUE]\n", argv[0]),
-               EXIT_FAILURE;
-    }
-
-    int count = 0;
-    float* values = read_input(stdin, &count);
-
-    if (argc >= 3)
-    {
-        if (sscanf(argv[2], "%f", &max_value) == 0)
-            return fputs("ERROR: invalid max_value\n", stderr), EXIT_FAILURE;
-    }
-    else
-    {
-        max_value = count > 0 ? values[0] : 0;
-        for (int i = 1; i < count; ++i)
-            max_value = values[i] > max_value ? values[i] : max_value;
-    }
-
-    render_graph(values, count, max_value, height, NULL);
-
-    free(values);
-
-    return EXIT_SUCCESS;
-}
