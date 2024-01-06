@@ -10,11 +10,15 @@
 #include <signal.h>         // sig_atomic_t, SIG*, sigaction, sigemptyset,
                             // sigaddset, sigprocmask, sigsuspend
 #include <sys/time.h>       // setitimer
+#include <unistd.h>         // STDOUT_FILENO
+
 #include <stdio.h>          // *printf, perror
 #include <stdlib.h>         // strtol, EXIT_*, NULL, malloc
 #include <errno.h>          // errno
 #include <stdarg.h>         // va_args
 #include <string.h>         // memset, strcmp
+
+#include <sys/ioctl.h>      // ioctl
 
 
 #define SIZE(lst) \
@@ -204,6 +208,10 @@ typedef struct
     int count;
     desc_t desc;
 
+    int term_w;
+    int term_h;
+
+
 } monitor_t;
 
 
@@ -216,7 +224,19 @@ void copy(const queue_t* queue, double* values)
 
 void monitor_clear(monitor_t* monitor)
 {
-    printf("\033[%dA\033[K", monitor->height + 3);
+    struct winsize win;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1
+            && (win.ws_row != monitor->term_h || win.ws_col != monitor->term_w))
+    {
+        monitor->term_w = win.ws_col;
+        monitor->term_h = win.ws_row;
+        printf("\033[2J" "\033[1;1H");
+    }
+    else
+    {
+        printf("\033[%dA\033[K", monitor->height + 3);
+    }
+    // printf("%dx%d", monitor->term_w, monitor->term_h);
 }
 
 void monitor_graph(monitor_t* monitor)
