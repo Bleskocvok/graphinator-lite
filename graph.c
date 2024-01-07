@@ -3,7 +3,7 @@
 #include <stdio.h>      // printf, fputs, FILE, fscanf, stderr, stdin
 #include <stdlib.h>     // malloc, realloc, free, exit, NULL
 #include <assert.h>     // assert
-#include <string.h>     // strerror
+#include <string.h>     // strerror, strncpy
 #include <errno.h>      // errno
 
 
@@ -82,6 +82,147 @@ static void spaces(int count)
 {
     for (int i = 0; i < count; ++i)
         printf(" ");
+}
+
+static char_utf8_t get_slope(int col1, int col2,
+                             int top1, int top2,
+                             int bot1, int bot2)
+{
+    static const char* m[4][4] =
+    {
+        { " ", "🬽", "🬿", "🮟" },
+
+        { "🭈", "▃", "🭑", "🭏" },
+
+        { "🭊", "🭆", "▆", "🭍" },
+
+        { "🮞", "🭄", "🭂", "█" },
+    };
+
+    static const char* m2[4][4] =
+    {
+        { 0x0, 0x0, 0x0, "▌" },
+
+        { 0x0, 0x0, 0x0, "🭎" },
+
+        { 0x0, 0x0, 0x0, "🭌" },
+
+        { "▐", "🭃", "🭁", "█" },
+    };
+
+    static const char* m3[4][4] =
+    {
+        { " ", "🬼", "🬾", "🭀" },
+
+        { "🭇", 0x0, 0x0, 0x0 },
+
+        { "🭉", 0x0, 0x0, 0x0 },
+
+        { "🭋", 0x0, 0x0, 0x0 },
+    };
+
+    char_utf8_t c = { 0 };
+
+    // if (col1 == 3 && top1 && col2 != 3)
+    //     strncpy(c.data, matrix2[col2][col1], 4);
+    // else if (col2 == 3 && top2 && col1 != 3)
+    //     strncpy(c.data, matrix2[col2][col1], 4);
+    // else if (col1 == 0 && !top1 && col2 != 0)
+    //     strncpy(c.data, matrix3[col2][col1], 4);
+    // else if (col2 == 0 && !top2 && col1 != 0)
+    //     strncpy(c.data, matrix3[col2][col1], 4);
+    // else
+    //     strncpy(c.data, matrix[col2][col1], 4);
+
+    if      (col1 == 0 && col2 == 3) strncpy(c.data, (top2 == 0 ? m3 : m2)[col2][col1], 4);
+    else if (col1 == 3 && col2 == 0) strncpy(c.data, (top1 == 0 ? m3 : m2)[col2][col1], 4);
+    else if (col1 == 0 && bot1 != 3) strncpy(c.data, m3[col2][col1], 4);
+    else if (col1 == 3 && top1 != 0) strncpy(c.data, m2[col2][col1], 4);
+    else if (col2 == 0 && bot2 != 3) strncpy(c.data, m3[col2][col1], 4);
+    else if (col2 == 3 && top2 != 0) strncpy(c.data, m2[col2][col1], 4);
+    else                             strncpy(c.data, m[col2][col1], 4);
+
+    return c;
+
+    // "█", "▌", "▐",
+
+    // "🭌", "🭎", "🭐"
+
+    // "🭁", "🭃", "🭅"
+
+    // "▂", "▆"
+
+    // "🭁	🭂	🭃	🭄	🭅	🭆	🭇	🭈	🭉	🭊	🭋	🭌	🭍	🭎	🭏"
+    // "🭐	🭑"
+}
+
+static int get_val(double row, double value, double max_value, int height)
+{
+    double chunk = max_value / height;
+
+    if (value <= row * chunk)
+        return 0;
+
+    if (value >= (row + 1) * chunk)
+        return 3;
+
+    return (value - row * chunk) * 3 / chunk;
+
+    return 3;
+}
+
+void render_graph_alt(const double* values, int count, double max_value, int height,
+                      const desc_t* desc)
+{
+    if (desc)
+        printf("%*.*f ┐\n", desc->align, desc->decimals, max_value);
+
+    for (int r = height - 1; r >= 0; --r)
+    {
+        if (desc)
+        {
+            if (r == height / 2 && height % 2 == 1)
+                printf("%*.*f ┤", desc->align, desc->decimals, max_value / 2);
+            else
+                spaces(desc->align + 1), printf("│");;
+        }
+        else
+            printf("│");
+
+        for (int c = 0; c < count; ++c)
+        {
+            int top1 = 0, top2 = 0,
+                bot1 = 0, bot2 = 0;
+
+            if (r < height - 1)
+            {
+                top1 =               get_val(r+1, values[c],   max_value, height);
+                top2 = c+1 < count ? get_val(r+1, values[c+1], max_value, height) : 0;
+            }
+
+            if (r > 0)
+            {
+                bot1 =               get_val(r-1, values[c],   max_value, height);
+                bot2 = c+1 < count ? get_val(r-1, values[c+1], max_value, height) : 0;
+            }
+
+            int col1 =               get_val(r, values[c],   max_value, height);
+            int col2 = c+1 < count ? get_val(r, values[c+1], max_value, height) : 0;
+
+            char_utf8_t slope = get_slope(col1, col2, top1, top2, bot1, bot2);
+            printf("%s", slope.data);
+        }
+        printf("\n");
+    }
+
+    if (desc)
+        printf("%*.*f ┴", desc->align, desc->decimals, 0 * max_value);
+    else
+        printf("└");
+
+    for (int c = 0; c < count; ++c)
+        printf("─");
+    printf("\n");
 }
 
 
@@ -165,5 +306,3 @@ double* read_input(FILE* file, int* count_out)
 
     return ptr;
 }
-
-
