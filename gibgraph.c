@@ -5,30 +5,38 @@
 #include <stdlib.h>     // free, exit, NULL, EXIT_*
 
 
+void usage(char** argv)
+{
+    fprintf(stderr, "Usage: %s ‹dots | fill› ‹HEIGHT› [MAX_VALUE]\n", argv[0]);
+}
 
 int main(int argc, char** argv)
 {
     int height = 7;
     double max_value;
+    style_t style;
 
-    if (argc >= 2)
+    if (argc >= 3)
     {
-        if (sscanf(argv[1], "%d", &height) == 0)
-            return fputs("ERROR: invalid height\n", stderr), EXIT_FAILURE;
+        if (style_from_str(argv[1], &style))
+            return fputs("ERROR: invalid style\n", stderr), usage(argv),
+                   EXIT_FAILURE;
+
+        if (sscanf(argv[2], "%d", &height) == 0)
+            return fputs("ERROR: invalid height\n", stderr), usage(argv),
+                   EXIT_FAILURE;
     }
     else
-    {
-        return fprintf(stderr, "Usage: %s ‹HEIGHT› [MAX_VALUE]\n", argv[0]),
-               EXIT_FAILURE;
-    }
+        return usage(argv), EXIT_FAILURE;
 
     int count = 0;
     double* values = read_input(stdin, &count);
 
-    if (argc >= 3)
+    if (argc >= 4)
     {
         if (sscanf(argv[2], "%lf", &max_value) == 0)
-            return fputs("ERROR: invalid max_value\n", stderr), EXIT_FAILURE;
+            return fputs("ERROR: invalid max_value\n", stderr), usage(argv),
+                   EXIT_FAILURE;
     }
     else
     {
@@ -37,7 +45,7 @@ int main(int argc, char** argv)
             max_value = values[i] > max_value ? values[i] : max_value;
     }
 
-    render_graph(values, count, max_value, height, NULL);
+    render_graph(values, count, max_value, height, NULL, style);
 
     free(values);
 

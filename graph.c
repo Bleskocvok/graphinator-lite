@@ -3,7 +3,7 @@
 #include <stdio.h>      // printf, fputs, FILE, fscanf, stderr, stdin
 #include <stdlib.h>     // malloc, realloc, free, exit, NULL
 #include <assert.h>     // assert
-#include <string.h>     // strerror, strncpy
+#include <string.h>     // strerror, strncpy, strcmp
 #include <errno.h>      // errno
 
 
@@ -12,6 +12,10 @@ typedef struct
     unsigned char data[4];
 
 } char_utf8_t;
+
+
+typedef char_utf8_t (*print_char_f) (int c, int r, const double* values,
+                                     int count, double max_value, int height);
 
 
 static char_utf8_t get_braille(int col1, int col2)
@@ -62,7 +66,7 @@ static char_utf8_t get_braille(int col1, int col2)
 }
 
 
-static int get_dots(double row, double value, double max_value, int height)
+static int get_level(int levels, double row, double value, double max_value, int height)
 {
     double chunk = max_value / height;
 
@@ -70,11 +74,9 @@ static int get_dots(double row, double value, double max_value, int height)
         return 0;
 
     if (value >= (row + 1) * chunk)
-        return 4;
+        return levels;
 
-    return (value - row * chunk) * 4 / chunk;
-
-    return 4;
+    return (value - row * chunk) * levels / chunk;
 }
 
 
@@ -123,17 +125,6 @@ static char_utf8_t get_slope(int col1, int col2,
 
     char_utf8_t c = { 0 };
 
-    // if (col1 == 3 && top1 && col2 != 3)
-    //     strncpy(c.data, matrix2[col2][col1], 4);
-    // else if (col2 == 3 && top2 && col1 != 3)
-    //     strncpy(c.data, matrix2[col2][col1], 4);
-    // else if (col1 == 0 && !top1 && col2 != 0)
-    //     strncpy(c.data, matrix3[col2][col1], 4);
-    // else if (col2 == 0 && !top2 && col1 != 0)
-    //     strncpy(c.data, matrix3[col2][col1], 4);
-    // else
-    //     strncpy(c.data, matrix[col2][col1], 4);
-
     if      (col1 == 0 && col2 == 3) strncpy(c.data, (top2 == 0 ? m3 : m2)[col2][col1], 4);
     else if (col1 == 3 && col2 == 0) strncpy(c.data, (top1 == 0 ? m3 : m2)[col2][col1], 4);
     else if (col1 == 0 && bot1 != 3) strncpy(c.data, m3[col2][col1], 4);
@@ -143,36 +134,52 @@ static char_utf8_t get_slope(int col1, int col2,
     else                             strncpy(c.data, m[col2][col1], 4);
 
     return c;
-
-    // "█", "▌", "▐",
-
-    // "🭌", "🭎", "🭐"
-
-    // "🭁", "🭃", "🭅"
-
-    // "▂", "▆"
-
-    // "🭁	🭂	🭃	🭄	🭅	🭆	🭇	🭈	🭉	🭊	🭋	🭌	🭍	🭎	🭏"
-    // "🭐	🭑"
 }
 
-static int get_val(double row, double value, double max_value, int height)
+
+char_utf8_t draw_braille(int c, int r, const double* values,
+                         int count, double max_value, int height)
 {
-    double chunk = max_value / height;
+    char_utf8_t empty = { 0 };
+    if (c % 2) return empty;
 
-    if (value <= row * chunk)
-        return 0;
+    int col1 = get_level(4, r, values[c],     max_value, height);
+    int col2 = c + 1 < count
+             ? get_level(4, r, values[c + 1], max_value, height)
+             : 0;
 
-    if (value >= (row + 1) * chunk)
-        return 3;
-
-    return (value - row * chunk) * 3 / chunk;
-
-    return 3;
+    return get_braille(col1, col2);
 }
 
-void render_graph_alt(const double* values, int count, double max_value, int height,
-                      const desc_t* desc)
+
+char_utf8_t draw_legacy(int c, int r, const double* values,
+                        int count, double max_value, int height)
+{
+    int top1 = 0, top2 = 0,
+        bot1 = 0, bot2 = 0;
+
+    if (r < height - 1)
+    {
+        top1 =               get_level(3, r+1, values[c],   max_value, height);
+        top2 = c+1 < count ? get_level(3, r+1, values[c+1], max_value, height) : 0;
+    }
+
+    if (r > 0)
+    {
+        bot1 =               get_level(3, r-1, values[c],   max_value, height);
+        bot2 = c+1 < count ? get_level(3, r-1, values[c+1], max_value, height) : 0;
+    }
+
+    int col1 =               get_level(3, r, values[c],   max_value, height);
+    int col2 = c+1 < count ? get_level(3, r, values[c+1], max_value, height) : 0;
+
+    return get_slope(col1, col2, top1, top2, bot1, bot2);
+}
+
+
+void render_graph_f(const double* values, int count, double max_value,
+                    int height, int width, const desc_t* desc,
+                    print_char_f draw_func)
 {
     if (desc)
         printf("%*.*f ┐\n", desc->align, desc->decimals, max_value);
@@ -191,26 +198,8 @@ void render_graph_alt(const double* values, int count, double max_value, int hei
 
         for (int c = 0; c < count; ++c)
         {
-            int top1 = 0, top2 = 0,
-                bot1 = 0, bot2 = 0;
-
-            if (r < height - 1)
-            {
-                top1 =               get_val(r+1, values[c],   max_value, height);
-                top2 = c+1 < count ? get_val(r+1, values[c+1], max_value, height) : 0;
-            }
-
-            if (r > 0)
-            {
-                bot1 =               get_val(r-1, values[c],   max_value, height);
-                bot2 = c+1 < count ? get_val(r-1, values[c+1], max_value, height) : 0;
-            }
-
-            int col1 =               get_val(r, values[c],   max_value, height);
-            int col2 = c+1 < count ? get_val(r, values[c+1], max_value, height) : 0;
-
-            char_utf8_t slope = get_slope(col1, col2, top1, top2, bot1, bot2);
-            printf("%s", slope.data);
+            char_utf8_t symbol = draw_func(c, r, values, count, max_value, height);
+            printf("%s", symbol.data);
         }
         printf("\n");
     }
@@ -220,53 +209,20 @@ void render_graph_alt(const double* values, int count, double max_value, int hei
     else
         printf("└");
 
-    for (int c = 0; c < count; ++c)
+    for (int c = 0; c < width; ++c)
         printf("─");
     printf("\n");
 }
 
-
 void render_graph(const double* values, int count, double max_value, int height,
-                  const desc_t* desc)
+                  const desc_t* desc, style_t style)
 {
-    if (desc)
-        printf("%*.*f ┐\n", desc->align, desc->decimals, max_value);
-
-    for (int r = height - 1; r >= 0; --r)
-    {
-        if (desc)
-        {
-            if (r == height / 2 && height % 2 == 1)
-                printf("%*.*f ┤", desc->align, desc->decimals, max_value / 2);
-            else
-                spaces(desc->align + 1), printf("│");;
-        }
-        else
-        {
-            printf("│");
-        }
-
-        for (int c = 0; c < count; c += 2)
-        {
-            int col1 = get_dots(r, values[c],     max_value, height);
-            int col2 = c + 1 < count
-                     ? get_dots(r, values[c + 1], max_value, height)
-                     : 0;
-
-            char_utf8_t braille = get_braille(col1, col2);
-            printf("%s", braille.data);
-        }
-        printf("\n");
-    }
-
-    if (desc)
-        printf("%*.*f ┴", desc->align, desc->decimals, 0 * max_value);
+    if (style == DOTS)
+        render_graph_f(values, count, max_value, height, count / 2, desc, draw_braille);
+    else if (style == FILL)
+        render_graph_f(values, count, max_value, height, count, desc, draw_legacy);
     else
-        printf("└");
-
-    for (int c = 0; c < count; c += 2)
-        printf("─");
-    printf("\n");
+        assert(0);
 }
 
 
@@ -305,4 +261,12 @@ double* read_input(FILE* file, int* count_out)
         *count_out = count;
 
     return ptr;
+}
+
+int style_from_str(const char* str, style_t* style)
+{
+    if (strcmp(str, "dots") == 0) *style = DOTS;
+    else if (strcmp(str, "fill") == 0) *style = FILL;
+    else return 1;
+    return 0;
 }

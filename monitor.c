@@ -207,6 +207,7 @@ typedef struct
     double* values;
     int count;
     desc_t desc;
+    style_t style;
 
     int term_w;
     int term_h;
@@ -243,7 +244,7 @@ void monitor_graph(monitor_t* monitor)
 {
     copy(&monitor->queue, monitor->values);
     render_graph(monitor->values, monitor->count, monitor->max_value,
-                monitor->height, &monitor->desc);
+                 monitor->height, &monitor->desc, monitor->style);
     fflush(stdout);
 }
 
@@ -274,22 +275,36 @@ void monitor_mem(void* ptr)
     monitor_graph(monitor);
 }
 
+void usage(char** argv)
+{
+    error("Usage: %s ‹seconds› ‹cpu | mem› [dots | fill] [height=30] [history_size=80]\n", argv[0]);
+}
 
 int main(int argc, char** argv)
 {
     if (argc < 3)
-        return error("Usage: %s ‹seconds› ‹cpu | mem›\n", argv[0]),
-               EXIT_FAILURE;
+        return usage(argv), EXIT_FAILURE;
 
     period_t period;
     if (parse_period(&period, argv[1]) == -1)
         return error("try e.g.: 1.5\n"), EXIT_FAILURE;
 
     monitor_t monitor = { 0 };
-    monitor.count = 30;
+    monitor.count = 80;
     queue_init(&monitor.queue, monitor.count);
     monitor.values = (double*) malloc(monitor.count * sizeof(double));
-    monitor.height = 7;
+    monitor.height = 35;
+    monitor.style = FILL;
+
+    if (argc >= 4)
+        if (style_from_str(argv[3], &monitor.style))
+            return usage(argv), EXIT_FAILURE;
+
+    if (argc >= 5)
+        monitor.height = strtol(argv[4], NULL, 0);
+
+    if (argc >= 6)
+        monitor.count = strtol(argv[5], NULL, 0);
 
     for (int i = 0; i < monitor.height + 3; ++i)
         printf("\n");
